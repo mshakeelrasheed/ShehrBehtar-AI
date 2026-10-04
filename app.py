@@ -1,12 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 from pathlib import Path
 from streamlit_folium import st_folium
-
-try:
-    from streamlit_js_eval import get_geolocation
-except ImportError:
-    get_geolocation = None
 
 from config import DEFAULT_CITY, DEFAULT_LAT, DEFAULT_LNG, STATIC_DIR
 from core.database import init_db, insert_ticket, get_all_tickets, mark_ticket_resolved
@@ -36,6 +32,29 @@ init_db()
 # Track submitted tickets in current session
 if "submitted_uids" not in st.session_state:
     st.session_state.submitted_uids = []
+
+# Persistent Geo-Coordinates State
+if "cur_lat" not in st.session_state:
+    st.session_state.cur_lat = float(DEFAULT_LAT)
+if "cur_lng" not in st.session_state:
+    st.session_state.cur_lng = float(DEFAULT_LNG)
+if "cur_addr" not in st.session_state:
+    st.session_state.cur_addr = f"تحصیل بہاولپور شہر, Urban Sector ({DEFAULT_CITY})"
+
+# Check and consume coordinates passed via Browser Native Geolocation Script
+query_params = st.query_params
+if "gps_lat" in query_params and "gps_lng" in query_params:
+    try:
+        new_lat = float(query_params["gps_lat"])
+        new_lng = float(query_params["gps_lng"])
+        st.session_state.cur_lat = new_lat
+        st.session_state.cur_lng = new_lng
+        st.session_state.cur_addr = reverse_geocode_coords(new_lat, new_lng)
+        # Clear query params to keep URL clean and prevent repeated re-runs
+        st.query_params.clear()
+        st.rerun()
+    except Exception:
+        pass
 
 # ==========================================
 # MODERN DESIGN SYSTEM & CUSTOM STYLING
@@ -213,19 +232,73 @@ if portal_view == "📢 Citizen Portal (Report & Track)":
                 img_obj = Image.open(active_img) if uploaded_file else active_img
                 st.image(img_obj, caption="Evidence Source View", width=380)
 
-                auto_lat, auto_lng, detected_addr = extract_exif_gps(img_obj)
+                # Extract EXIF if available and update state
+                exif_lat, exif_lng, exif_addr = extract_exif_gps(img_obj)
+                if exif_lat is not None and exif_lng is not None:
+                    # Update session state if different
+                    if round(st.session_state.cur_lat, 4) != round(exif_lat, 4):
+                        st.session_state.cur_lat = exif_lat
+                        st.session_state.cur_lng = exif_lng
+                        st.session_state.cur_addr = exif_addr
 
                 st.markdown("#### 2. Geo-Location Details")
 
-                # Mobile Browser Live Location Access
-                current_lat, current_lng, current_addr = auto_lat, auto_lng, detected_addr
-                if get_geolocation is not None:
-                    loc = get_geolocation()
-                    if loc and "coords" in loc:
-                        current_lat = float(loc["coords"]["latitude"])
-                        current_lng = float(loc["coords"]["longitude"])
-                        current_addr = reverse_geocode_coords(current_lat, current_lng)
-                        st.markdown(f"<div style='color:#34d399; font-size:13px; font-weight:700; margin-bottom:8px;'>📍 Live GPS Active ({current_lat:.4f}, {current_lng:.4f})</div>", unsafe_allow_html=True)
+                # Native Browser Geolocation Button (Bypasses Streamlit Cloud iframe blocks)
+                loc_col1, loc_col2 = st.columns([1.2, 1.8])
+                with loc_col1:
+                    components.html("""
+                    <div style="font-family: sans-serif;">
+                        <button id="gps_fetch_btn" onclick="fetchLiveLocation()" style="
+                            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+                            color: white;
+                            border: none;
+                            padding: 8px 14px;
+                            border-radius: 6px;
+                            font-size: 13px;
+                            font-weight: 700;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            box-shadow: 0 3px 10px rgba(16, 185, 129, 0.3);
+                        ">
+                            📍 Live Device GPS
+                        </button>
+                        <p id="gps_err" style="font-size: 11px; color: #f87171; margin: 4px 0 0 0;"></p>
+                    </div>
+
+                    <script>
+                    function fetchLiveLocation() {
+                        const errBox = document.getElementById("gps_err");
+                        if (!navigator.geolocation) {
+                            errBox.innerText = "GPS is not supported by your browser.";
+                            return;
+                        }
+                        errBox.innerText = "Accessing GPS...";
+                        navigator.geolocation.getCurrentPosition(
+                            function(pos) {
+                                const lat = pos.coords.latitude.toFixed(6);
+                                const lng = pos.coords.longitude.toFixed(6);
+                                try {
+                                    const currentUrl = new URL(window.parent.location.href);
+                                    currentUrl.searchParams.set('gps_lat', lat);
+                                    currentUrl.searchParams.set('gps_lng', lng);
+                                    window.parent.location.href = currentUrl.href;
+                                } catch(e) {
+                                    window.location.search = `?gps_lat=${lat}&gps_lng=${lng}`;
+                                }
+                            },
+                            function(err) {
+                                errBox.innerText = "Permission Denied / Timeout";
+                            },
+                            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                        );
+                    }
+                    </script>
+                    """, height=50)
+
+                with loc_col2:
+                    st.markdown(f"<div style='color:#34d399; font-size:12.5px; font-weight:700; padding-top:6px;'>Active: {st.session_state.cur_lat:.4f}, {st.session_state.cur_lng:.4f}</div>", unsafe_allow_html=True)
 
                 selected_cat = st.selectbox(
                     "Hazard Category Selection",
@@ -237,12 +310,27 @@ if portal_view == "📢 Citizen Portal (Report & Track)":
                     ]
                 )
 
+                # Coords fields bound to dynamic keys to guarantee UI re-rendering upon location update
                 c1, c2 = st.columns(2)
                 with c1:
-                    in_lat = st.number_input("Latitude", value=current_lat, format="%.6f")
+                    in_lat = st.number_input(
+                        "Latitude", 
+                        value=float(st.session_state.cur_lat), 
+                        format="%.6f", 
+                        key=f"lat_inp_{st.session_state.cur_lat}"
+                    )
                 with c2:
-                    in_lng = st.number_input("Longitude", value=current_lng, format="%.6f")
-                in_addr = st.text_input("Area / Landmark", value=current_addr)
+                    in_lng = st.number_input(
+                        "Longitude", 
+                        value=float(st.session_state.cur_lng), 
+                        format="%.6f", 
+                        key=f"lng_inp_{st.session_state.cur_lng}"
+                    )
+                in_addr = st.text_input(
+                    "Area / Landmark", 
+                    value=st.session_state.cur_addr, 
+                    key=f"addr_inp_{st.session_state.cur_lat}"
+                )
 
                 file_hint = ""
                 if uploaded_file is not None:
