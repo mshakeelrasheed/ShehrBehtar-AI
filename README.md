@@ -25,7 +25,7 @@
 
 ## 📌 Overview
 
-Built for the **Bahawalpur Smart Civic Operations Pilot**, ShehrBehtar AI was our final project for the **Generative & Agentic AI Training – Cohort 11**.
+Built for the **City Smart Civic Operations Pilot**, ShehrBehtar AI was our final project for the **Generative & Agentic AI Training – Cohort 11**.
 
 Reporting a civic hazard is harder than it should be. Residents are asked to fill in long forms and pick from department categories they may not understand. The report then often lands with the wrong office, where it waits. Broken roads, open manholes, and illegal waste heaps stay unattended, and nobody is clearly accountable for fixing them.
 
