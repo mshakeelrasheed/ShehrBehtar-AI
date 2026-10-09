@@ -355,6 +355,23 @@ Try the deployed application:
 
 ---
 
+# 👥 Team & Contributions
+
+| Team Member | Role | Profile |
+|---|---|---|
+| **Muhammad Shakeel** | **Lead AI Architect** | [LinkedIn](https://www.linkedin.com/in/muhammad-shakeel-rasheed) · [GitHub](https://github.com/mshakeelrasheed) |
+| **Muhammad Rafay** | **Backend & Systems Engineer** | 
+| **Nazish Fatima** | **UI/UX Designer** | 
+| **Anoshay Atiq** | **Product & PRD Lead** 
+| **Numan Qaiser** | **Demo & Media Specialist** | 
+
+---
+
+# 🙏 Acknowledgements
+
+Thank you to NCEAC, HEC Pakistan, Pakistan Engineering Council, Pak Angels, iCodeGuru, and ASPIRE Pakistan for organizing the Generative & Agentic AI Training – Cohort 11.
+
+Special thanks to our mentors sir Dr. Zafar Shahid and sir Mohammad Anwar Khan, and to all our instructors and trainers, for guiding us from theory to deployed agentic systems.
 
 # 📄 License
 
